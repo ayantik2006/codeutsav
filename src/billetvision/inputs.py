@@ -104,12 +104,12 @@ def frame_overrides(width: int, height: int) -> Dict[str, Any]:
     }
 
 
-def camera_overrides(index: int) -> Dict[str, Any]:
+def camera_overrides(index: int, backend: Optional[str] = None) -> Dict[str, Any]:
     """Live camera: the ROI is fitted to the first real frame (``vision.auto_roi``), so the
     device is opened exactly once.  Length mode etc. stay whatever ``config.yaml`` says."""
     return {
         "system": {"batch_prefix": "LIVE"},
-        "capture": {"source": index, "loop": False, "fps_target": 15},
+        "capture": {"source": index, "loop": False, "fps_target": 15, "backend": backend},
         "vision": {"auto_roi": True},
     }
 
