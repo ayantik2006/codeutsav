@@ -602,9 +602,12 @@ def get_alerts(n: int = Query(default=50, ge=1, le=500)):
 
 
 @app.post("/api/alerts/clear")
-def clear_active_alert():
-    """Dismiss the currently active alert banner."""
-    pipeline.alert_manager.clear_active()
+def clear_active_alert(history: bool = Query(default=False)):
+    """Dismiss the active alert banner; with ``history=true`` also clear the alert history."""
+    if history:
+        pipeline.alert_manager.clear_history()
+    else:
+        pipeline.alert_manager.clear_active()
     return {"ok": True}
 
 

@@ -30,7 +30,7 @@ MAX_UPLOAD_BYTES = {"video": 500 * 1024 * 1024, "image": 25 * 1024 * 1024}
 
 IMAGE_REPEAT = 8          # frames a still image is fed to the tracker (best-N needs several)
 _ROI_MARGIN = 0.03        # fraction of the frame left outside the ROI
-_MAX_IMAGE_SIDE = 1600    # larger stills are downscaled on save
+_MAX_IMAGE_SIDE = 4096    # larger stills are downscaled on save (keep phone detail: 1 px must be << tolerance)
 _SAFE_CHARS = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
@@ -124,10 +124,18 @@ def video_overrides(path: Path, meta: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def image_overrides(path: Path, meta: Dict[str, Any]) -> Dict[str, Any]:
+    """A still photo: no conveyor, so the billet is measured even if it touches the frame
+    edge (flagged REVIEW instead of dropped) and the tracker lines sit on the ROI edges."""
     return {
         "system": {"batch_prefix": "UPLOAD"},
         "capture": {"source": str(path), "loop": False, "fps_target": 15, "repeat": IMAGE_REPEAT},
-        "vision": {**frame_overrides(meta["width"], meta["height"]), "calibration_attempts": 1},
+        "vision": {
+            **frame_overrides(meta["width"], meta["height"]),
+            "calibration_attempts": 1,
+            "still_image": True,
+            "entry_margin_px": 0,
+            "length_mode": "direct",
+        },
     }
 
 

@@ -67,6 +67,18 @@ class SourceUnavailable(RuntimeError):
     """The requested input could not be opened (e.g. no camera at that index)."""
 
 
+def still_image_notes(complete: bool, scale_source: str, mm_per_px: float) -> List[str]:
+    """Reasons an uploaded photo's mm values are not trustworthy (empty = trust them)."""
+    notes: List[str] = []
+    if not complete:
+        notes.append("billet touches the edge of the photo — dimensions may be truncated; "
+                     "photograph the whole billet")
+    if scale_source != "marker":
+        notes.append(f"no calibration marker in the photo — mm values use the stored scale "
+                     f"({mm_per_px:.4f} mm/px) and are not verified for this camera")
+    return notes
+
+
 def _deep_merge(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:
     """Return ``base`` updated recursively with ``extra`` (inputs untouched)."""
     out = copy.deepcopy(base)
@@ -646,6 +658,10 @@ class BilletVisionPipeline:
     def loop_enabled(self) -> bool:
         return bool(self._cfg.get("capture", {}).get("loop", True))
 
+    @property
+    def _still_image(self) -> bool:
+        return bool(self._cfg.get("vision", {}).get("still_image", False))
+
     def _reconnect(self) -> None:
         """Replace the frame source after a camera loss (best effort)."""
         logger.warning("Camera lost — attempting to reconnect")
@@ -734,7 +750,8 @@ class BilletVisionPipeline:
         meas: Optional[Measurement] = None
         # Direct mode needs the whole billet in view; belt-speed mode accepts clipped
         # frames because only the cross-section (not the length) is read from them.
-        if complete or self._length_mode == "belt_speed":
+        # A still photo has no later frame to wait for: measure it, and flag it REVIEW.
+        if complete or self._length_mode == "belt_speed" or self._still_image:
             meas = measure(seg.contour, self._mm_per_px, shape=self._profile_shape, travel_axis="x")
             if complete:
                 mask = np.zeros(gray_crop.shape[:2], dtype=np.uint8)
@@ -819,6 +836,13 @@ class BilletVisionPipeline:
         if seg_fix.source == "unresolved":  # suspect outline the ViT could not fix: never pass it silently
             reasons = [*reasons, seg_fix.note]
             if verdict.status == "PASS":
+                verdict = Verdict(status="REVIEW", reasons=reasons)
+        if self._still_image:
+            notes = still_image_notes(
+                bool(tb.top_samples[0].extras.get("complete", True)), self._scale_source, self._mm_per_px
+            )
+            if notes:  # the mm values cannot be trusted, so neither PASS nor FAIL is a safe verdict
+                reasons = [*reasons, *notes]
                 verdict = Verdict(status="REVIEW", reasons=reasons)
         t_verdict = time.perf_counter()
 
